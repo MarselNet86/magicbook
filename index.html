@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apple — Neo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-behavior: auto; }
+
+    body {
+      color: #f5f5f7;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 50% 34%, #16101f 0%, #0a0810 55%, #050507 100%);
+      background-attachment: fixed;
+    }
+
+    /* ===== Fixed visual layers ===== */
+    .stage { position: fixed; inset: 0; overflow: hidden; z-index: 0; }
+
+    .stage canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    #video-full   { z-index: 1; }                 /* full-screen video (fades out)   */
+    #video-mask   { z-index: 2; }                 /* same video, masked into "Neo"   */
+    #particle-canvas { z-index: 3; pointer-events: none; opacity: 0.5; }
+
+    /* ===== Hero (Apple logo + scroll hint) ===== */
+    .hero {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      will-change: opacity;
+      pointer-events: none;
+    }
+
+    .hero__logo {
+      width: 120px;
+      height: auto;
+      opacity: 0;
+      animation: fade-in 1.4s ease forwards;
+    }
+
+    .scroll-hint {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      opacity: 0;
+      animation: fade-in 1.4s ease 0.6s forwards;
+    }
+
+    .scroll-hint__text {
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #86868b;
+    }
+
+    .scroll-hint__arrow {
+      width: 22px;
+      height: 22px;
+      border-right: 1.5px solid #86868b;
+      border-bottom: 1.5px solid #86868b;
+      transform: rotate(45deg);
+      animation: bounce 1.8s ease-in-out infinite;
+    }
+
+    @keyframes fade-in { to { opacity: 1; } }
+    @keyframes bounce {
+      0%, 100% { transform: rotate(45deg) translate(0, 0); }
+      50%      { transform: rotate(45deg) translate(5px, 5px); }
+    }
+
+    /* ===== Scroll spacer (gives room to scrub the video) ===== */
+    .scroll-space { position: relative; height: 600vh; z-index: -1; }
+
+    #fallback-video {
+      position: absolute;
+      width: 1px; height: 1px;
+      opacity: 0; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <canvas id="video-full"></canvas>
+    <canvas id="video-mask"></canvas>
+    <canvas id="particle-canvas"></canvas>
+  </div>
+
+  <div class="hero" id="hero">
+    <img class="hero__logo" src="images/Apple_logo_white.svg.png" alt="Apple" />
+    <div class="scroll-hint">
+      <span class="scroll-hint__text">Scroll</span>
+      <span class="scroll-hint__arrow"></span>
+    </div>
+  </div>
+
+  <div class="scroll-space"></div>
+
+  <video id="fallback-video" src="images/1.mp4" muted playsinline preload="auto"></video>
+
+  <script>
+  (function () {
+    "use strict";
+
+    var FRAME_COUNT = 187;
+    var framePath = function (i) {
+      return "images/frames/frame_" + String(i + 1).padStart(3, "0") + ".jpg";
+    };
+
+    /* ---- Tunable timing / sizing ----
+       Phase 1 (p < MASK_START):  full video, no word.
+       Phase 2 (MASK_START..1):   word "Neo" appears and shrinks big -> small,
+                                  full-video layer fades out over FULL_FADE. */
+    var MASK_START = 0.32;   // where the word begins to emerge
+    var FULL_FADE  = 0.18;   // how much scroll the full-video layer takes to fade out
+    var NEO_Y      = 0.40;   // vertical position (0 top .. 1 bottom) — higher than center
+    var NEO_BIG    = 1.00;   // starting word size (share of canvas height) — large
+    var NEO_SMALL  = 0.30;   // final word size
+
+    var cFull = document.getElementById("video-full");
+    var cMask = document.getElementById("video-mask");
+    var ctxFull = cFull.getContext("2d");
+    var ctxMask = cMask.getContext("2d");
+    var hero = document.getElementById("hero");
+    var fallbackVideo = document.getElementById("fallback-video");
+
+    var clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
+
+    /* ---------- Frame preloading ---------- */
+    var images = new Array(FRAME_COUNT);
+    var failures = 0;
+    var useVideoFallback = false;
+
+    for (var i = 0; i < FRAME_COUNT; i++) {
+      (function (idx) {
+        var img = new Image();
+        img.onload = function () { if (idx === 0) applyProgress(latestProgress); };
+        img.onerror = function () {
+          failures++;
+          if (failures > 3 && !useVideoFallback) enableVideoFallback();
+        };
+        img.src = framePath(idx);
+        images[idx] = img;
+      })(i);
+    }
+
+    function enableVideoFallback() {
+      useVideoFallback = true;
+      fallbackVideo.addEventListener("seeked", function () { renderScene(latestProgress); });
+    }
+
+    /* ---------- Canvas sizing ---------- */
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    function sizeCanvas(c) {
+      c.width = Math.round(window.innerWidth * dpr);
+      c.height = Math.round(window.innerHeight * dpr);
+    }
+
+    function resize() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      sizeCanvas(cFull);
+      sizeCanvas(cMask);
+      renderScene(latestProgress);
+    }
+
+    /* draw a source covering the canvas (object-fit: cover) */
+    function drawCover(ctx, c, source, sw, sh) {
+      if (!sw || !sh) return;
+      var cw = c.width, ch = c.height;
+      var ir = sw / sh, cr = cw / ch;
+      var dw, dh, dx, dy;
+      if (cr > ir) { dw = cw; dh = cw / ir; dx = 0; dy = (ch - dh) / 2; }
+      else { dh = ch; dw = ch * ir; dy = 0; dx = (cw - dw) / 2; }
+      ctx.drawImage(source, dx, dy, dw, dh);
+    }
+
+    /* current video source for a given progress */
+    function getSource(p) {
+      if (useVideoFallback) {
+        if (fallbackVideo.readyState >= 2) {
+          return { el: fallbackVideo, w: fallbackVideo.videoWidth, h: fallbackVideo.videoHeight };
+        }
+        return null;
+      }
+      var frame = Math.round(p * (FRAME_COUNT - 1));
+      var img = images[frame];
+      if (img && img.complete && img.naturalWidth) {
+        return { el: img, w: img.naturalWidth, h: img.naturalHeight };
+      }
+      return null;
+    }
+
+    /* word size (in px) for a given progress: big -> small after MASK_START */
+    function neoFontSize(p, ch) {
+      var mp = clamp((p - MASK_START) / (1 - MASK_START), 0, 1);
+      return ch * (NEO_BIG + mp * (NEO_SMALL - NEO_BIG));
+    }
+
+    function drawNeoMask(ctx, c, p) {
+      var F = neoFontSize(p, c.height);
+      ctx.font = "900 " + F + 'px "Helvetica Neue", "Arial Black", Arial, sans-serif';
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#fff";
+      ctx.fillText("Neo", c.width / 2, c.height * NEO_Y);
+    }
+
+    function renderScene(p) {
+      var src = getSource(p);
+
+      // ---- full-screen layer (fades out as the word emerges) ----
+      ctxFull.clearRect(0, 0, cFull.width, cFull.height);
+      if (src) drawCover(ctxFull, cFull, src.el, src.w, src.h);
+      var fullOpacity = clamp(1 - (p - MASK_START) / FULL_FADE, 0, 1);
+      cFull.style.opacity = fullOpacity;
+
+      // ---- masked "Neo" layer ----
+      ctxMask.globalCompositeOperation = "source-over";
+      ctxMask.clearRect(0, 0, cMask.width, cMask.height);
+      if (src) {
+        drawCover(ctxMask, cMask, src.el, src.w, src.h);
+        ctxMask.globalCompositeOperation = "destination-in";
+        drawNeoMask(ctxMask, cMask, p);
+        ctxMask.globalCompositeOperation = "source-over";
+      }
+    }
+
+    /* ---------- Scroll → progress ---------- */
+    var latestProgress = 0;
+
+    function computeProgress() {
+      var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      var startPx = window.innerHeight * 0.5;   // start after half of the first screen
+      var endPx = maxScroll;                    // end near the bottom
+      var y = window.pageYOffset || document.documentElement.scrollTop;
+      return clamp((y - startPx) / Math.max(1, endPx - startPx), 0, 1);
+    }
+
+    function applyProgress(p) {
+      if (useVideoFallback && fallbackVideo.duration) {
+        fallbackVideo.currentTime = p * (fallbackVideo.duration - 0.01);
+        // opacity/mask redrawn on 'seeked'; still update full-layer opacity now
+        var fo = clamp(1 - (p - MASK_START) / FULL_FADE, 0, 1);
+        cFull.style.opacity = fo;
+      } else {
+        renderScene(p);
+      }
+      var y = window.pageYOffset || document.documentElement.scrollTop;
+      hero.style.opacity = clamp(1 - y / (window.innerHeight * 0.45), 0, 1);
+    }
+
+    var ticking = false;
+    function onScroll() {
+      latestProgress = computeProgress();
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(function () {
+          applyProgress(latestProgress);
+          ticking = false;
+        });
+      }
+    }
+
+    /* ---------- Particles ---------- */
+    var pCanvas = document.getElementById("particle-canvas");
+    var pCtx = pCanvas.getContext("2d");
+    var particles = [];
+
+    function initParticles() {
+      pCanvas.width = Math.round(window.innerWidth * dpr);
+      pCanvas.height = Math.round(window.innerHeight * dpr);
+      var count = Math.round((window.innerWidth * window.innerHeight) / 30000);
+      particles = [];
+      for (var k = 0; k < count; k++) {
+        particles.push({
+          x: Math.random() * pCanvas.width,
+          y: Math.random() * pCanvas.height,
+          r: (Math.random() * 1.5 + 0.4) * dpr,
+          vy: -(Math.random() * 0.22 + 0.04) * dpr,
+          vx: (Math.random() - 0.5) * 0.12 * dpr,
+          a: Math.random() * 0.45 + 0.12
+        });
+      }
+    }
+
+    function tickParticles() {
+      pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+      for (var k = 0; k < particles.length; k++) {
+        var pt = particles[k];
+        pt.x += pt.vx; pt.y += pt.vy;
+        if (pt.y < -10) { pt.y = pCanvas.height + 10; pt.x = Math.random() * pCanvas.width; }
+        if (pt.x < -10) pt.x = pCanvas.width + 10;
+        if (pt.x > pCanvas.width + 10) pt.x = -10;
+        pCtx.beginPath();
+        pCtx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2);
+        pCtx.fillStyle = "rgba(197, 125, 255," + pt.a + ")";
+        pCtx.fill();
+      }
+      requestAnimationFrame(tickParticles);
+    }
+
+    /* ---------- Init ---------- */
+    function init() {
+      resize();
+      initParticles();
+      latestProgress = computeProgress();
+      applyProgress(latestProgress);
+      tickParticles();
+
+      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", function () {
+        resize();
+        initParticles();
+        applyProgress(latestProgress);
+      });
+
+      setTimeout(function () {
+        if (!images[0] || !images[0].naturalWidth) {
+          if (!useVideoFallback) enableVideoFallback();
+        }
+      }, 4000);
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+  })();
+  </script>
+</body>
+</html>

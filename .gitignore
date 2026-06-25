@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Dependencies (if added later)
+node_modules/
+
+# Generated video frames (re-create with:
+#   ffmpeg -i images/1.mp4 -vf "scale=1280:-2" -q:v 4 images/frames/frame_%03d.jpg)
+images/frames/
+
+# Temp
+*.tmp
+.cache/
