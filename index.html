@@ -19,6 +19,14 @@
       background-attachment: fixed;
     }
 
+    /* ===== Cinematic wrapper (fades out for the cards section) ===== */
+    #cinema {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      will-change: opacity;
+    }
+
     /* ===== Fixed visual layers ===== */
     .stage { position: fixed; inset: 0; overflow: hidden; z-index: 0; }
 
@@ -145,6 +153,112 @@
     /* ===== Scroll spacer (gives room to scrub the video) ===== */
     .scroll-space { position: relative; height: 800vh; z-index: -1; }
 
+    /* ===== Magic Keyboard bento cards ===== */
+    .cards {
+      position: relative;
+      z-index: 0;
+      height: 220vh;                 /* scroll length for the assemble animation */
+      background:
+        radial-gradient(120% 90% at 50% 0%, #e7ecf6 0%, #eef0f4 45%, #f3eee7 100%);
+    }
+    .cards__sticky {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .bento {
+      width: min(1180px, 92vw);
+      height: 82vh;
+      display: grid;
+      grid-template-columns: 1fr 1.2fr 1fr;
+      grid-template-rows: repeat(6, 1fr);
+      grid-template-areas:
+        "title  key  macs"
+        "title  key  macs"
+        "toggle key  macs"
+        "toggle key  copy"
+        "photo  key  copy"
+        "photo  key  copy";
+      gap: clamp(8px, 0.9vw, 16px);
+    }
+
+    .card {
+      position: relative;
+      border-radius: clamp(16px, 1.4vw, 26px);
+      overflow: hidden;
+      background: #e9ebf1;
+      box-shadow: 0 12px 40px rgba(40, 50, 80, 0.08);
+      will-change: transform;
+    }
+    .card--title  { grid-area: title;  background: #cbd7ec; }
+    .card--toggle { grid-area: toggle; background: #efe6da; }
+    .card--photo  { grid-area: photo;  background: #e4e9f2; }
+    .card--key    { grid-area: key;    background: linear-gradient(180deg, #f5f6fa 0%, #eef0f6 100%); }
+    .card--macs   { grid-area: macs;   background: #dfe6f0; }
+    .card--copy   { grid-area: copy;   background: #efe6da; }
+
+    /* image cards */
+    .card > img { display: block; }
+    .card--photo > img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 6%;
+    }
+    .card--key, .card--macs { display: grid; place-items: center; }
+    .rot { transform: rotate(90deg); transform-origin: center; }
+    .rot-key  { width: 72vh; height: auto; max-width: none; }
+    .rot-macs { width: 40vh; height: auto; max-width: none; }
+
+    /* title card */
+    .card--title { padding: clamp(18px, 2vw, 32px); display: flex; align-items: flex-end; }
+    .card__title {
+      margin: 0;
+      font-size: clamp(28px, 3.4vw, 60px);
+      font-weight: 600;
+      line-height: 0.98;
+      letter-spacing: -0.02em;
+      color: #2b3a57;
+    }
+
+    /* toggle card */
+    .card--toggle { padding: clamp(16px, 1.8vw, 28px); display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+    .seg {
+      display: inline-flex;
+      align-self: flex-start;
+      background: #e2d6c6;
+      border-radius: 999px;
+      padding: 5px;
+      gap: 2px;
+    }
+    .seg span {
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: clamp(12px, 1vw, 15px);
+      font-weight: 600;
+      color: #8a7d6b;
+      letter-spacing: 0.02em;
+    }
+    .seg__on { background: #fff; color: #2b3a57; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .card__label { margin: 0; font-size: clamp(12px, 1vw, 15px); color: #9a8e7c; letter-spacing: 0.08em; text-transform: uppercase; }
+
+    /* copy card */
+    .card--copy { padding: clamp(18px, 2.2vw, 36px); display: flex; align-items: center; }
+    .card__copy {
+      margin: 0;
+      font-size: clamp(20px, 2.2vw, 40px);
+      font-weight: 600;
+      line-height: 1.08;
+      letter-spacing: -0.01em;
+      color: #5a4f40;
+    }
+
     #fallback-video, #fallback-video2 {
       position: absolute;
       width: 1px; height: 1px;
@@ -153,26 +267,63 @@
   </style>
 </head>
 <body>
-  <div class="stage">
-    <canvas id="video-full"></canvas>
-    <canvas id="video-mask"></canvas>
-    <canvas id="particle-canvas"></canvas>
-  </div>
-
-  <div class="hero" id="hero">
-    <img class="hero__logo" src="images/Apple_logo_white.svg.png" alt="Apple" />
-    <div class="scroll-hint">
-      <span class="scroll-hint__text">Scroll</span>
-      <span class="scroll-hint__arrow"></span>
+  <!-- Cinematic, scroll-driven layers (fade out when the cards section arrives) -->
+  <div id="cinema">
+    <div class="stage">
+      <canvas id="video-full"></canvas>
+      <canvas id="video-mask"></canvas>
+      <canvas id="particle-canvas"></canvas>
     </div>
+
+    <div class="hero" id="hero">
+      <img class="hero__logo" src="images/Apple_logo_white.svg.png" alt="Apple" />
+      <div class="scroll-hint">
+        <span class="scroll-hint__text">Scroll</span>
+        <span class="scroll-hint__arrow"></span>
+      </div>
+    </div>
+
+    <div class="tagline" id="tagline">Revolution of 2026</div>
+
+    <canvas id="video2"></canvas>
+    <div class="blackout" id="blackout"></div>
   </div>
-
-  <div class="tagline" id="tagline">Revolution of 2026</div>
-
-  <canvas id="video2"></canvas>
-  <div class="blackout" id="blackout"></div>
 
   <div class="scroll-space"></div>
+
+  <!-- ===== Magic Keyboard bento cards (assemble on scroll) ===== -->
+  <section class="cards" id="cards">
+    <div class="cards__sticky">
+      <div class="bento" id="bento">
+        <article class="card card--title" data-dx="-1" data-dy="-1">
+          <h2 class="card__title">Magic<br>Keyboard</h2>
+        </article>
+
+        <article class="card card--toggle" data-dx="-1" data-dy="0">
+          <div class="seg">
+            <span class="seg__on">US</span><span>ISO</span><span>JIS</span>
+          </div>
+          <p class="card__label">Layout</p>
+        </article>
+
+        <article class="card card--photo" data-dx="-1" data-dy="1">
+          <img src="images/image-removebg-preview (1)-Photoroom.png" alt="Magic Keyboard with iPad" />
+        </article>
+
+        <article class="card card--key" data-dx="0" data-dy="0">
+          <img class="rot rot-key" src="images/Apple_Magic_Keyboard_-_US_remix_transparent.png" alt="Apple Magic Keyboard" />
+        </article>
+
+        <article class="card card--macs" data-dx="1" data-dy="-1">
+          <img class="rot rot-macs" src="images/design_endframe__ds3qdxgq7zki_xlarge.png" alt="Apple devices" />
+        </article>
+
+        <article class="card card--copy" data-dx="1" data-dy="1">
+          <h3 class="card__copy">Designed by Apple.<br>Every key, effortless.</h3>
+        </article>
+      </div>
+    </div>
+  </section>
 
   <video id="fallback-video" src="images/1.mp4" muted playsinline preload="auto"></video>
   <video id="fallback-video2" src="images/2.mp4" muted playsinline preload="auto"></video>
@@ -224,6 +375,11 @@
     var ctx2 = cVid2.getContext("2d");
     var blackout = document.getElementById("blackout");
     var fallbackVideo2 = document.getElementById("fallback-video2");
+
+    var cinema = document.getElementById("cinema");
+    var scrollSpace = document.querySelector(".scroll-space");
+    var cardsSection = document.getElementById("cards");
+    var cardEls = document.querySelectorAll("#bento .card");
 
     /* ---------- Frame preloading ---------- */
     var images = new Array(FRAME_COUNT);
@@ -383,11 +539,40 @@
     var latestProgress = 0;
 
     function computeProgress() {
-      var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      var startPx = window.innerHeight * 0.5;   // start after half of the first screen
-      var endPx = maxScroll;                    // end near the bottom
+      // The video sequence is driven only by the spacer, not the whole document
+      // (the cards section adds height after it).
+      var startPx = window.innerHeight * 0.5;
+      var endPx = scrollSpace.offsetTop + scrollSpace.offsetHeight - window.innerHeight;
       var y = window.pageYOffset || document.documentElement.scrollTop;
       return clamp((y - startPx) / Math.max(1, endPx - startPx), 0, 1);
+    }
+
+    /* ---------- Cards: handoff fade + assemble animation ---------- */
+    function updateCards() {
+      var rect = cardsSection.getBoundingClientRect();
+      var vh = window.innerHeight;
+
+      // Handoff: fade the cinematic layers out as the cards section rises in.
+      var h = clamp((vh - rect.top) / vh, 0, 1);
+      cinema.style.opacity = (1 - h).toFixed(3);
+      cinema.style.pointerEvents = h > 0.5 ? "none" : "auto";
+
+      // Assemble progress: 0 while entering, 0->1 once the section is pinned.
+      var range = cardsSection.offsetHeight - vh;
+      var t = clamp(-rect.top / Math.max(1, range), 0, 1);
+      var e = easeOut(t);
+
+      var spread = window.innerWidth * 0.07;
+      for (var i = 0; i < cardEls.length; i++) {
+        var el = cardEls[i];
+        var dx = parseFloat(el.getAttribute("data-dx")) || 0;
+        var dy = parseFloat(el.getAttribute("data-dy")) || 0;
+        var tx = dx * (1 - e) * spread;
+        var ty = dy * (1 - e) * spread;
+        var sc = 1 + (1 - e) * 0.10;
+        el.style.transform =
+          "translate(" + tx.toFixed(1) + "px," + ty.toFixed(1) + "px) scale(" + sc.toFixed(3) + ")";
+      }
     }
 
     function updateTagline(tp) {
@@ -444,6 +629,9 @@
       // ----- Apple logo -----
       var y = window.pageYOffset || document.documentElement.scrollTop;
       hero.style.opacity = clamp(1 - y / (window.innerHeight * 0.45), 0, 1);
+
+      // ----- Cards section (handoff + assemble) -----
+      updateCards();
     }
 
     var ticking = false;
