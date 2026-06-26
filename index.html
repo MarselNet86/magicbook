@@ -198,14 +198,14 @@
     /* ---- Scroll timeline (fractions of total scroll) ----
        0 .. S1_END           video1 + "Neo" sequence
        TAG_S .. TAG_E        "Revolution of 2026" reveals
-       D1_S .. D1_E          screen darkens to black
-       V2_S .. V2_E          2.mp4 scrubs (black lifts by V2_REVEAL)
-       D2_S .. D2_E          screen darkens again at the end          */
-    var ANIM_END  = 0.30;   // video1 + "Neo" finish (== S1_END)
-    var S1_END    = 0.30;
-    var TAG_S = 0.30, TAG_E = 0.41;
-    var D1_S  = 0.43, D1_E  = 0.48;
-    var V2_S  = 0.49, V2_E  = 0.86, V2_REVEAL = 0.53;
+       CIRCLE_S .. CIRCLE_E  2.mp4 reveals through a growing circle (from bottom)
+       V2_S .. V2_E          2.mp4 scrubs
+       D2_S .. D2_E          screen darkens at the very end           */
+    var ANIM_END  = 0.28;   // video1 + "Neo" finish (== S1_END)
+    var S1_END    = 0.28;
+    var TAG_S = 0.28, TAG_E = 0.40;
+    var CIRCLE_S = 0.40, CIRCLE_E = 0.58;   // circular reveal grows here
+    var V2_S  = 0.40, V2_E  = 0.86;         // 2.mp4 plays right after the text
     var D2_S  = 0.86, D2_E  = 1.00;
 
     var cFull = document.getElementById("video-full");
@@ -285,7 +285,8 @@
         }
         return null;
       }
-      var f = Math.round(ap * (FRAME2_COUNT - 1));
+      var FRAME2_START = 6; // skip the dark intro frames so the reveal shows content
+      var f = Math.round(FRAME2_START + ap * (FRAME2_COUNT - 1 - FRAME2_START));
       var img = images2[f];
       if (img && img.complete && img.naturalWidth) {
         return { el: img, w: img.naturalWidth, h: img.naturalHeight };
@@ -399,12 +400,19 @@
         "translate(-50%, " + ty.toFixed(2) + "px) scale(" + sc.toFixed(3) + ")";
     }
 
-    function blackoutOpacity(p) {
-      if (p < D1_S) return 0;
-      if (p < D1_E) return seg(p, D1_S, D1_E);            // darken to black
-      if (p < V2_REVEAL) return 1 - seg(p, V2_S, V2_REVEAL); // hold, then lift to reveal 2.mp4
-      if (p < D2_S) return 0;
-      return seg(p, D2_S, D2_E);                           // darken again at the end
+    function applyCircleReveal(reveal) {
+      if (reveal <= 0) {
+        cVid2.style.opacity = 0;
+        return;
+      }
+      cVid2.style.opacity = 1;
+      // radius needed to cover the whole viewport from the bottom-center anchor
+      var w = window.innerWidth, h = window.innerHeight;
+      var maxR = Math.sqrt((w / 2) * (w / 2) + h * h) * 1.04;
+      var r = reveal * maxR;
+      var clip = "circle(" + r.toFixed(1) + "px at 50% 100%)";
+      cVid2.style.clipPath = clip;
+      cVid2.style.webkitClipPath = clip;
     }
 
     function applyProgress(p) {
@@ -427,11 +435,11 @@
       } else {
         renderScene2(ap2);
       }
-      // reveal scene 2 only once the screen is fully black (seamless swap)
-      cVid2.style.opacity = p >= D1_E ? 1 : 0;
+      // circular reveal growing from the bottom of the page
+      applyCircleReveal(easeOut(seg(p, CIRCLE_S, CIRCLE_E)));
 
-      // ----- Darken transitions -----
-      blackout.style.opacity = blackoutOpacity(p).toFixed(3);
+      // ----- Final darken -----
+      blackout.style.opacity = seg(p, D2_S, D2_E).toFixed(3);
 
       // ----- Apple logo -----
       var y = window.pageYOffset || document.documentElement.scrollTop;
