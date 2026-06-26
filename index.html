@@ -14,9 +14,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
       overflow-x: hidden;
-      background:
-        radial-gradient(circle at 50% 34%, #16101f 0%, #0a0810 55%, #050507 100%);
-      background-attachment: fixed;
+      background: #000;       /* solid black — matches the video's darken, seamless into cards */
     }
 
     /* ===== Cinematic wrapper (fades out for the cards section) ===== */
@@ -158,7 +156,7 @@
       position: relative;
       z-index: 0;
       height: 220vh;                 /* scroll length for the assemble animation */
-      background: #060608;           /* continues the black end of the video — no seam */
+      background: transparent;       /* let the page's fixed bg show through — no seam */
     }
     .cards__sticky {
       position: sticky;
@@ -187,15 +185,14 @@
 
     .card {
       position: relative;
-      border-radius: clamp(16px, 1.4vw, 26px);
-      overflow: hidden;
-      background: #111114;           /* subtle dark surface, no shadow, no border */
+      overflow: visible;
+      background: transparent;       /* no card surface — content floats on the page */
       will-change: transform;
     }
     .card--title  { grid-area: title; }
     .card--toggle { grid-area: toggle; }
     .card--photo  { grid-area: photo; }
-    .card--key    { grid-area: key;  background: #0b0b0d; }
+    .card--key    { grid-area: key; }
     .card--macs   { grid-area: macs; }
     .card--copy   { grid-area: copy; }
 
@@ -361,7 +358,7 @@
     var TAG_S = 0.28, TAG_E = 0.40;
     var CIRCLE_S = 0.40, CIRCLE_E = 0.58;   // circular reveal grows here
     var V2_S  = 0.40, V2_E  = 0.96;         // 2.mp4 keeps moving almost to the bottom
-    var D2_S  = 0.88, D2_E  = 1.00;         // darken overlaps the still-moving video
+    var D2_S  = 0.92, D2_E  = 1.00;         // short, late darken — less pure black before cards
 
     var cFull = document.getElementById("video-full");
     var cMask = document.getElementById("video-mask");
@@ -556,8 +553,9 @@
       var rect = cardsSection.getBoundingClientRect();
       var vh = window.innerHeight;
 
-      // Handoff: fade the cinematic layers out as the cards section rises in.
-      var h = clamp((vh - rect.top) / vh, 0, 1);
+      // Handoff: fade the cinematic layers out quickly as the cards rise in
+      // (over the first ~45vh of the section, so the black doesn't linger).
+      var h = clamp((vh - rect.top) / (vh * 0.45), 0, 1);
       cinema.style.opacity = (1 - h).toFixed(3);
       cinema.style.pointerEvents = h > 0.5 ? "none" : "auto";
 
