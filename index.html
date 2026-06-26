@@ -156,6 +156,7 @@
       background: #fff;
       opacity: 0;
       pointer-events: none;
+      transition: opacity 0.22s linear;   /* soften the black -> white blend */
     }
 
     /* ===== Third video (3.mp4), starts white, ends black ===== */
@@ -168,6 +169,7 @@
       z-index: 3;
       opacity: 0;
       pointer-events: none;
+      transition: opacity 0.22s linear;   /* fade in together with the white */
     }
 
     /* ===== Scroll spacer (gives room to scrub the video) ===== */
@@ -684,14 +686,15 @@
       var spCards = clamp(-cr.top / Math.max(1, cardsSection.offsetHeight - vh), 0, 1);
       var vr = v3Section.getBoundingClientRect();
 
-      // Fade black -> white at the tail of the scatter; stay white through video 3.
-      var white = vr.top <= vh ? 1 : seg(spCards, 0.78, 1.0);
-      whiteout.style.opacity = white.toFixed(3);
+      // Single crossfade: the white overlay AND 3.mp4 (its near-white first frame)
+      // fade in together over the tail of the scatter — no blank white pause, and
+      // the black -> white blend flows straight into the video.
+      var tw = vr.top <= vh ? 1 : seg(spCards, 0.7, 1.0);
+      whiteout.style.opacity = tw.toFixed(3);
+      cVid3.style.opacity = tw.toFixed(3);
 
-      // Video 3 becomes active as its spacer enters; scrubs white -> black.
-      var active = vr.top < vh * 0.9;
-      cVid3.style.opacity = active ? 1 : 0;
-      if (active) {
+      if (tw > 0) {
+        // ap3 = 0 (white first frame) until the spacer pins, then scrubs to black.
         var ap3 = clamp(-vr.top / Math.max(1, v3Section.offsetHeight - vh), 0, 1);
         if (useVideo3Fallback && fallbackVideo3.duration) {
           fallbackVideo3.currentTime = ap3 * (fallbackVideo3.duration - 0.01);
