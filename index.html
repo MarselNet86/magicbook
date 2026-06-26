@@ -38,7 +38,7 @@
     .hero {
       position: fixed;
       inset: 0;
-      z-index: 5;
+      z-index: 8;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -89,10 +89,63 @@
       50%      { transform: rotate(45deg) translate(5px, 5px); }
     }
 
-    /* ===== Scroll spacer (gives room to scrub the video) ===== */
-    .scroll-space { position: relative; height: 600vh; z-index: -1; }
+    /* ===== Tagline that reveals below "Neo" ===== */
+    .tagline {
+      position: fixed;
+      left: 50%;
+      top: 62%;
+      z-index: 4;
+      width: min(92vw, 1100px);
+      text-align: center;
+      font-size: clamp(30px, 6vw, 84px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.04;
+      pointer-events: none;
 
-    #fallback-video {
+      opacity: 0;
+      filter: blur(16px);
+      transform: translate(-50%, 22px) scale(0.97);
+      will-change: opacity, transform, filter;
+
+      background: linear-gradient(
+        105deg,
+        #ff74c4 0%,
+        #c77dff 32%,
+        #8f7bff 58%,
+        #58b6ff 100%
+      );
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+    }
+
+    /* ===== Second video (2.mp4), full-screen, above scene 1 ===== */
+    #video2 {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 5;
+      opacity: 0;
+    }
+
+    /* ===== Black overlay used for the darken transitions ===== */
+    .blackout {
+      position: fixed;
+      inset: 0;
+      z-index: 6;
+      background: #000;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* ===== Scroll spacer (gives room to scrub the video) ===== */
+    .scroll-space { position: relative; height: 800vh; z-index: -1; }
+
+    #fallback-video, #fallback-video2 {
       position: absolute;
       width: 1px; height: 1px;
       opacity: 0; pointer-events: none;
@@ -114,9 +167,15 @@
     </div>
   </div>
 
+  <div class="tagline" id="tagline">Revolution of 2026</div>
+
+  <canvas id="video2"></canvas>
+  <div class="blackout" id="blackout"></div>
+
   <div class="scroll-space"></div>
 
   <video id="fallback-video" src="images/1.mp4" muted playsinline preload="auto"></video>
+  <video id="fallback-video2" src="images/2.mp4" muted playsinline preload="auto"></video>
 
   <script>
   (function () {
@@ -136,15 +195,35 @@
     var NEO_Y      = 0.40;   // vertical position (0 top .. 1 bottom) — higher than center
     var NEO_BIG    = 1.00;   // starting word size (share of canvas height) — large
     var NEO_SMALL  = 0.30;   // final word size
+    /* ---- Scroll timeline (fractions of total scroll) ----
+       0 .. S1_END           video1 + "Neo" sequence
+       TAG_S .. TAG_E        "Revolution of 2026" reveals
+       D1_S .. D1_E          screen darkens to black
+       V2_S .. V2_E          2.mp4 scrubs (black lifts by V2_REVEAL)
+       D2_S .. D2_E          screen darkens again at the end          */
+    var ANIM_END  = 0.30;   // video1 + "Neo" finish (== S1_END)
+    var S1_END    = 0.30;
+    var TAG_S = 0.30, TAG_E = 0.41;
+    var D1_S  = 0.43, D1_E  = 0.48;
+    var V2_S  = 0.49, V2_E  = 0.86, V2_REVEAL = 0.53;
+    var D2_S  = 0.86, D2_E  = 1.00;
 
     var cFull = document.getElementById("video-full");
     var cMask = document.getElementById("video-mask");
     var ctxFull = cFull.getContext("2d");
     var ctxMask = cMask.getContext("2d");
     var hero = document.getElementById("hero");
+    var tagline = document.getElementById("tagline");
     var fallbackVideo = document.getElementById("fallback-video");
 
     var clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
+    var easeOut = function (t) { return 1 - Math.pow(1 - t, 3); };
+    var seg = function (p, a, b) { return clamp((p - a) / (b - a), 0, 1); };
+
+    var cVid2 = document.getElementById("video2");
+    var ctx2 = cVid2.getContext("2d");
+    var blackout = document.getElementById("blackout");
+    var fallbackVideo2 = document.getElementById("fallback-video2");
 
     /* ---------- Frame preloading ---------- */
     var images = new Array(FRAME_COUNT);
@@ -164,9 +243,60 @@
       })(i);
     }
 
+    function animProgress() { return clamp(latestProgress / ANIM_END, 0, 1); }
+
     function enableVideoFallback() {
       useVideoFallback = true;
-      fallbackVideo.addEventListener("seeked", function () { renderScene(latestProgress); });
+      fallbackVideo.addEventListener("seeked", function () { renderScene(animProgress()); });
+    }
+
+    /* ---------- Scene 2 (2.mp4) frame preloading ---------- */
+    var FRAME2_COUNT = 59;
+    var frame2Path = function (i) {
+      return "images/frames2/frame_" + String(i + 1).padStart(3, "0") + ".jpg";
+    };
+    var images2 = new Array(FRAME2_COUNT);
+    var failures2 = 0;
+    var useVideo2Fallback = false;
+
+    for (var j = 0; j < FRAME2_COUNT; j++) {
+      (function (idx) {
+        var img = new Image();
+        img.onerror = function () {
+          failures2++;
+          if (failures2 > 3 && !useVideo2Fallback) enableVideo2Fallback();
+        };
+        img.src = frame2Path(idx);
+        images2[idx] = img;
+      })(j);
+    }
+
+    function vid2Progress() { return seg(latestProgress, V2_S, V2_E); }
+
+    function enableVideo2Fallback() {
+      useVideo2Fallback = true;
+      fallbackVideo2.addEventListener("seeked", function () { renderScene2(vid2Progress()); });
+    }
+
+    function getSource2(ap) {
+      if (useVideo2Fallback) {
+        if (fallbackVideo2.readyState >= 2) {
+          return { el: fallbackVideo2, w: fallbackVideo2.videoWidth, h: fallbackVideo2.videoHeight };
+        }
+        return null;
+      }
+      var f = Math.round(ap * (FRAME2_COUNT - 1));
+      var img = images2[f];
+      if (img && img.complete && img.naturalWidth) {
+        return { el: img, w: img.naturalWidth, h: img.naturalHeight };
+      }
+      return null;
+    }
+
+    function renderScene2(ap) {
+      ctx2.clearRect(0, 0, cVid2.width, cVid2.height);
+      var s = getSource2(ap);
+      if (s) drawCover(ctx2, cVid2, s.el, s.w, s.h);
     }
 
     /* ---------- Canvas sizing ---------- */
@@ -181,7 +311,9 @@
       dpr = Math.min(window.devicePixelRatio || 1, 2);
       sizeCanvas(cFull);
       sizeCanvas(cMask);
-      renderScene(latestProgress);
+      sizeCanvas(cVid2);
+      renderScene(animProgress());
+      renderScene2(vid2Progress());
     }
 
     /* draw a source covering the canvas (object-fit: cover) */
@@ -257,15 +389,51 @@
       return clamp((y - startPx) / Math.max(1, endPx - startPx), 0, 1);
     }
 
+    function updateTagline(tp) {
+      var e = easeOut(tp);
+      tagline.style.opacity = e.toFixed(3);
+      tagline.style.filter = "blur(" + ((1 - e) * 16).toFixed(2) + "px)";
+      var ty = (1 - e) * 22;            // rise up as it reveals
+      var sc = 0.97 + e * 0.03;         // subtle scale-in
+      tagline.style.transform =
+        "translate(-50%, " + ty.toFixed(2) + "px) scale(" + sc.toFixed(3) + ")";
+    }
+
+    function blackoutOpacity(p) {
+      if (p < D1_S) return 0;
+      if (p < D1_E) return seg(p, D1_S, D1_E);            // darken to black
+      if (p < V2_REVEAL) return 1 - seg(p, V2_S, V2_REVEAL); // hold, then lift to reveal 2.mp4
+      if (p < D2_S) return 0;
+      return seg(p, D2_S, D2_E);                           // darken again at the end
+    }
+
     function applyProgress(p) {
+      // ----- Scene 1: video1 + "Neo" -----
+      var ap = seg(p, 0, S1_END);
       if (useVideoFallback && fallbackVideo.duration) {
-        fallbackVideo.currentTime = p * (fallbackVideo.duration - 0.01);
-        // opacity/mask redrawn on 'seeked'; still update full-layer opacity now
-        var fo = clamp(1 - (p - MASK_START) / FULL_FADE, 0, 1);
-        cFull.style.opacity = fo;
+        fallbackVideo.currentTime = ap * (fallbackVideo.duration - 0.01);
+        cFull.style.opacity = clamp(1 - (ap - MASK_START) / FULL_FADE, 0, 1);
       } else {
-        renderScene(p);
+        renderScene(ap);
       }
+
+      // ----- Tagline reveal -----
+      updateTagline(seg(p, TAG_S, TAG_E));
+
+      // ----- Scene 2: 2.mp4 -----
+      var ap2 = seg(p, V2_S, V2_E);
+      if (useVideo2Fallback && fallbackVideo2.duration) {
+        fallbackVideo2.currentTime = ap2 * (fallbackVideo2.duration - 0.01);
+      } else {
+        renderScene2(ap2);
+      }
+      // reveal scene 2 only once the screen is fully black (seamless swap)
+      cVid2.style.opacity = p >= D1_E ? 1 : 0;
+
+      // ----- Darken transitions -----
+      blackout.style.opacity = blackoutOpacity(p).toFixed(3);
+
+      // ----- Apple logo -----
       var y = window.pageYOffset || document.documentElement.scrollTop;
       hero.style.opacity = clamp(1 - y / (window.innerHeight * 0.45), 0, 1);
     }
@@ -338,6 +506,9 @@
       setTimeout(function () {
         if (!images[0] || !images[0].naturalWidth) {
           if (!useVideoFallback) enableVideoFallback();
+        }
+        if (!images2[0] || !images2[0].naturalWidth) {
+          if (!useVideo2Fallback) enableVideo2Fallback();
         }
       }, 4000);
     }
