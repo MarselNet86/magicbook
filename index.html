@@ -131,8 +131,8 @@
        Phase 1 (p < MASK_START):  full video, no word.
        Phase 2 (MASK_START..1):   word "Neo" appears and shrinks big -> small,
                                   full-video layer fades out over FULL_FADE. */
-    var MASK_START = 0.32;   // where the word begins to emerge
-    var FULL_FADE  = 0.18;   // how much scroll the full-video layer takes to fade out
+    var MASK_START = 0.76;   // word emerges ~6s into the video (frame ~144)
+    var FULL_FADE  = 0.12;   // how much scroll the full-video layer takes to fade out
     var NEO_Y      = 0.40;   // vertical position (0 top .. 1 bottom) — higher than center
     var NEO_BIG    = 1.00;   // starting word size (share of canvas height) — large
     var NEO_SMALL  = 0.30;   // final word size
