@@ -148,6 +148,28 @@
       pointer-events: none;
     }
 
+    /* ===== White overlay: smooth black -> white into 3.mp4 ===== */
+    #whiteout {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      background: #fff;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* ===== Third video (3.mp4), starts white, ends black ===== */
+    #video3 {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 3;
+      opacity: 0;
+      pointer-events: none;
+    }
+
     /* ===== Scroll spacer (gives room to scrub the video) ===== */
     .scroll-space { position: relative; height: 800vh; z-index: -1; }
 
@@ -155,7 +177,7 @@
     .cards {
       position: relative;
       z-index: 0;
-      height: 220vh;                 /* scroll length for the assemble animation */
+      height: 360vh;                 /* assemble + hold + scatter */
       background: transparent;       /* let the page's fixed bg show through — no seam */
     }
     .cards__sticky {
@@ -260,7 +282,10 @@
       color: #f5f5f7;
     }
 
-    #fallback-video, #fallback-video2 {
+    /* spacer that gives scroll length to scrub 3.mp4 */
+    .video3-space { position: relative; height: 320vh; z-index: -1; }
+
+    #fallback-video, #fallback-video2, #fallback-video3 {
       position: absolute;
       width: 1px; height: 1px;
       opacity: 0; pointer-events: none;
@@ -290,44 +315,52 @@
     <div class="blackout" id="blackout"></div>
   </div>
 
+  <!-- white transition + third video (above the cinema, on top of the cards) -->
+  <div id="whiteout"></div>
+  <canvas id="video3"></canvas>
+
   <div class="scroll-space"></div>
 
   <!-- ===== Magic Keyboard bento cards (assemble on scroll) ===== -->
   <section class="cards" id="cards">
     <div class="cards__sticky">
       <div class="bento" id="bento">
-        <article class="card card--title" data-dx="-1" data-dy="-1">
+        <article class="card card--title" data-dx="-1" data-dy="-1" data-sx="-1" data-sy="-1">
           <h2 class="card__title">Magic<br>Keyboard</h2>
         </article>
 
-        <article class="card card--toggle" data-dx="-1" data-dy="0">
+        <article class="card card--toggle" data-dx="-1" data-dy="0" data-sx="-1" data-sy="0">
           <div class="seg">
             <span class="seg__on">US</span><span>ISO</span><span>JIS</span>
           </div>
           <p class="card__label">Layout</p>
         </article>
 
-        <article class="card card--photo" data-dx="-1" data-dy="1">
+        <article class="card card--photo" data-dx="-1" data-dy="1" data-sx="-1" data-sy="1">
           <img src="images/image-removebg-preview (1)-Photoroom.png" alt="Magic Keyboard with iPad" />
         </article>
 
-        <article class="card card--key" data-dx="0" data-dy="0">
+        <article class="card card--key" data-dx="0" data-dy="0" data-sx="0" data-sy="-1.5">
           <img class="rot rot-key" src="images/Apple_Magic_Keyboard_-_US_remix_transparent.png" alt="Apple Magic Keyboard" />
         </article>
 
-        <article class="card card--macs" data-dx="1" data-dy="-1">
+        <article class="card card--macs" data-dx="1" data-dy="-1" data-sx="1" data-sy="-1">
           <img class="rot rot-macs" src="images/design_endframe__ds3qdxgq7zki_xlarge.png" alt="Apple devices" />
         </article>
 
-        <article class="card card--copy" data-dx="1" data-dy="1">
+        <article class="card card--copy" data-dx="1" data-dy="1" data-sx="1" data-sy="1">
           <h3 class="card__copy">Designed by Apple.<br>Every key, effortless.</h3>
         </article>
       </div>
     </div>
   </section>
 
+  <!-- drives 3.mp4 scrub after the cards scatter -->
+  <div class="video3-space" id="video3-space"></div>
+
   <video id="fallback-video" src="images/1.mp4" muted playsinline preload="auto"></video>
   <video id="fallback-video2" src="images/2.mp4" muted playsinline preload="auto"></video>
+  <video id="fallback-video3" src="images/3.mp4" muted playsinline preload="auto"></video>
 
   <script>
   (function () {
@@ -381,6 +414,11 @@
     var scrollSpace = document.querySelector(".scroll-space");
     var cardsSection = document.getElementById("cards");
     var cardEls = document.querySelectorAll("#bento .card");
+    var whiteout = document.getElementById("whiteout");
+    var cVid3 = document.getElementById("video3");
+    var ctx3 = cVid3.getContext("2d");
+    var v3Section = document.getElementById("video3-space");
+    var fallbackVideo3 = document.getElementById("fallback-video3");
 
     /* ---------- Frame preloading ---------- */
     var images = new Array(FRAME_COUNT);
@@ -457,6 +495,58 @@
       if (s) drawCover(ctx2, cVid2, s.el, s.w, s.h);
     }
 
+    /* ---------- Scene 3 (3.mp4) — starts white, ends black ---------- */
+    var FRAME3_COUNT = 51;
+    var frame3Path = function (i) {
+      return "images/frames3/frame_" + String(i + 1).padStart(3, "0") + ".jpg";
+    };
+    var images3 = new Array(FRAME3_COUNT);
+    var failures3 = 0;
+    var useVideo3Fallback = false;
+
+    for (var q = 0; q < FRAME3_COUNT; q++) {
+      (function (idx) {
+        var img = new Image();
+        img.onerror = function () {
+          failures3++;
+          if (failures3 > 3 && !useVideo3Fallback) enableVideo3Fallback();
+        };
+        img.src = frame3Path(idx);
+        images3[idx] = img;
+      })(q);
+    }
+
+    function vid3Progress() {
+      var r = v3Section.getBoundingClientRect();
+      return clamp(-r.top / Math.max(1, v3Section.offsetHeight - window.innerHeight), 0, 1);
+    }
+
+    function enableVideo3Fallback() {
+      useVideo3Fallback = true;
+      fallbackVideo3.addEventListener("seeked", function () { renderScene3(vid3Progress()); });
+    }
+
+    function getSource3(ap) {
+      if (useVideo3Fallback) {
+        if (fallbackVideo3.readyState >= 2) {
+          return { el: fallbackVideo3, w: fallbackVideo3.videoWidth, h: fallbackVideo3.videoHeight };
+        }
+        return null;
+      }
+      var f = Math.round(ap * (FRAME3_COUNT - 1));
+      var img = images3[f];
+      if (img && img.complete && img.naturalWidth) {
+        return { el: img, w: img.naturalWidth, h: img.naturalHeight };
+      }
+      return null;
+    }
+
+    function renderScene3(ap) {
+      ctx3.clearRect(0, 0, cVid3.width, cVid3.height);
+      var s = getSource3(ap);
+      if (s) drawCover(ctx3, cVid3, s.el, s.w, s.h);
+    }
+
     /* ---------- Canvas sizing ---------- */
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
 
@@ -470,8 +560,10 @@
       sizeCanvas(cFull);
       sizeCanvas(cMask);
       sizeCanvas(cVid2);
+      sizeCanvas(cVid3);
       renderScene(animProgress());
       renderScene2(vid2Progress());
+      renderScene3(vid3Progress());
     }
 
     /* draw a source covering the canvas (object-fit: cover) */
@@ -559,21 +651,53 @@
       cinema.style.opacity = (1 - h).toFixed(3);
       cinema.style.pointerEvents = h > 0.5 ? "none" : "auto";
 
-      // Assemble progress: 0 while entering, 0->1 once the section is pinned.
+      // Section progress: 0 while entering, 0->1 once pinned.
       var range = cardsSection.offsetHeight - vh;
-      var t = clamp(-rect.top / Math.max(1, range), 0, 1);
-      var e = easeOut(t);
+      var sp = clamp(-rect.top / Math.max(1, range), 0, 1);
+
+      var assemble = easeOut(seg(sp, 0.0, 0.35));  // spread -> together
+      var scatter = seg(sp, 0.55, 0.92);           // together -> fly apart
+      scatter = scatter * scatter;                 // accelerate outward
 
       var spread = window.innerWidth * 0.07;
+      var scatterX = window.innerWidth * 0.85;
+      var scatterY = window.innerHeight * 0.95;
+
       for (var i = 0; i < cardEls.length; i++) {
         var el = cardEls[i];
         var dx = parseFloat(el.getAttribute("data-dx")) || 0;
         var dy = parseFloat(el.getAttribute("data-dy")) || 0;
-        var tx = dx * (1 - e) * spread;
-        var ty = dy * (1 - e) * spread;
-        var sc = 1 + (1 - e) * 0.10;
+        var sx = parseFloat(el.getAttribute("data-sx")) || 0;
+        var sy = parseFloat(el.getAttribute("data-sy")) || 0;
+        var tx = dx * (1 - assemble) * spread + sx * scatter * scatterX;
+        var ty = dy * (1 - assemble) * spread + sy * scatter * scatterY;
+        var sc = 1 + (1 - assemble) * 0.10;
         el.style.transform =
           "translate(" + tx.toFixed(1) + "px," + ty.toFixed(1) + "px) scale(" + sc.toFixed(3) + ")";
+      }
+    }
+
+    /* ---------- White transition + 3.mp4 ---------- */
+    function updateWhiteAndVideo3() {
+      var vh = window.innerHeight;
+      var cr = cardsSection.getBoundingClientRect();
+      var spCards = clamp(-cr.top / Math.max(1, cardsSection.offsetHeight - vh), 0, 1);
+      var vr = v3Section.getBoundingClientRect();
+
+      // Fade black -> white at the tail of the scatter; stay white through video 3.
+      var white = vr.top <= vh ? 1 : seg(spCards, 0.78, 1.0);
+      whiteout.style.opacity = white.toFixed(3);
+
+      // Video 3 becomes active as its spacer enters; scrubs white -> black.
+      var active = vr.top < vh * 0.9;
+      cVid3.style.opacity = active ? 1 : 0;
+      if (active) {
+        var ap3 = clamp(-vr.top / Math.max(1, v3Section.offsetHeight - vh), 0, 1);
+        if (useVideo3Fallback && fallbackVideo3.duration) {
+          fallbackVideo3.currentTime = ap3 * (fallbackVideo3.duration - 0.01);
+        } else {
+          renderScene3(ap3);
+        }
       }
     }
 
@@ -632,8 +756,9 @@
       var y = window.pageYOffset || document.documentElement.scrollTop;
       hero.style.opacity = clamp(1 - y / (window.innerHeight * 0.45), 0, 1);
 
-      // ----- Cards section (handoff + assemble) -----
+      // ----- Cards section (handoff + assemble + scatter) -----
       updateCards();
+      updateWhiteAndVideo3();
     }
 
     var ticking = false;
@@ -707,6 +832,9 @@
         }
         if (!images2[0] || !images2[0].naturalWidth) {
           if (!useVideo2Fallback) enableVideo2Fallback();
+        }
+        if (!images3[0] || !images3[0].naturalWidth) {
+          if (!useVideo3Fallback) enableVideo3Fallback();
         }
       }, 4000);
     }
