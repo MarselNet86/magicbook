@@ -694,8 +694,13 @@
       cVid3.style.opacity = tw.toFixed(3);
 
       if (tw > 0) {
-        // ap3 = 0 (white first frame) until the spacer pins, then scrubs to black.
-        var ap3 = clamp(-vr.top / Math.max(1, v3Section.offsetHeight - vh), 0, 1);
+        // 3.mp4 is already playing during the crossfade: its progress runs from
+        // the start of the transition (cards scatter tail) to the bottom of the
+        // spacer — so it never freezes on the first frame.
+        var y = window.pageYOffset || document.documentElement.scrollTop;
+        var startY = cardsSection.offsetTop + 0.7 * (cardsSection.offsetHeight - vh);
+        var endY = v3Section.offsetTop + v3Section.offsetHeight - vh;
+        var ap3 = clamp((y - startY) / Math.max(1, endY - startY), 0, 1);
         if (useVideo3Fallback && fallbackVideo3.duration) {
           fallbackVideo3.currentTime = ap3 * (fallbackVideo3.duration - 0.01);
         } else {
